@@ -1,0 +1,236 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bulk XML Generator</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" type="image/png" href="C:\Users\2332901\Downloads\xml-icon.jpg">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+</head>
+    <style>
+        h1 { 
+            font: sans-serif;
+        }
+        #chooseFile {
+            margin-left: 2rem;
+            margin-top: 5rem;
+            background: aqua;
+            color: #000048;
+        }
+        #chooseFile2 {
+            background: aqua;
+            color: #000048;
+        }
+        #downloadBtn {
+            margin-top: 5rem;
+            margin-left: 7rem;
+            background: #000048;
+        }
+        #downloadAllBtn {
+            margin-top: 1rem;
+        }
+        .card {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 22rem;
+            height: 20rem;
+        }
+        .navbar {
+            background: #000048;
+        }
+        #convertToExcelBtn {
+            background: #000048;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg">
+        <a class="navbar-brand text-light">XML Generator</a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+    </nav>
+
+    <h1 class='text-center'>Bulk XML Generator</h1>
+    <input class="btn" id="chooseFile" type="file" accept=".xlsx">
+    <button class='btn text-light' id='downloadBtn' onclick="convertExcelToXml()" style="border-radius:20px;">Convert and Download XML Files</button>
+    <div class="container mt-5" id="downloads" style="display: none; width:60%; margin-left:2rem;">
+        <p>Generated results!</p>
+        <ul id="downloadList" class="list-group">
+            <li id="noResults" class="list-group-item">No results to display</li>
+        </ul>
+        <button class='btn btn-secondary' id='downloadAllBtn' onclick="downloadAllFiles()">Download All</button>
+    </div>
+    <div class="card" style="float:right; width: 22rem; margin: 20px; height:20rem; box-shadow: 0 4px 8px #000048;">
+        <div class="card-body">
+            <h3 class="card-title">Convert XML to Excel?</h3>
+            <input class="btn" id="chooseFile2" type="file" accept=".xml"/>
+            <div class="d-flex justify-content-center align-items-center" style="height: 100px;">
+                <button class='btn btn-success' id='convertToExcelBtn' style="border-radius:20px;" onclick="convertXmlToExcel()">Convert</button>
+            </div>
+        </div>
+        <div class="container" id="excelDownloads" style="display: none;">
+            <h5>Download Excel:</h5>
+            <ul id="excelDownloadList" class="list-group">
+                <li id="noExcelResults" class="list-group-item">No results to display</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const generatedFiles = [];
+
+        function flattenJson(data) {
+            const result = {};
+
+            function recurse(cur, prop) {
+                if (Object(cur) !== cur) {
+                    result[prop] = cur;
+                } else if (Array.isArray(cur)) {
+                    for (let i = 0; i < cur.length; i++)
+                        recurse(cur[i], prop + "[" + i + "]");
+                    if (cur.length === 0)
+                        result[prop] = [];
+                } else {
+                    let isEmpty = true;
+                    for (const p in cur) {
+                        isEmpty = false;
+                        recurse(cur[p], prop ? prop + "." + p : p);
+                    }
+                    if (isEmpty && prop)
+                        result[prop] = {};
+                }
+            }
+
+            recurse(data, "");
+            return result;
+        }
+
+        function convertXmlToExcel() {
+            const fileInput = document.getElementById('chooseFile2');
+            const file = fileInput.files[0];
+		console.log("in xml to excel 1");
+            if (!file) {
+                alert('Please select an XML file first.');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(e.target.result, "application/xml");
+                const json = xmlToJson(xmlDoc);
+                const flattenedData = json.map(flattenJson);
+
+                const worksheet = XLSX.utils.json_to_sheet(flattenedData);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+		    console.log("in xml to excel 2");
+                const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+                const blob = new Blob([excelBuffer], { type: 'application/octet-stream' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'output.xlsx';
+                link.textContent = 'output.xlsx';
+                link.className = 'list-group-item list-group-item-action';
+                document.getElementById('noExcelResults').style.display = 'none';
+                document.getElementById('excelDownloadList').appendChild(link);
+                document.getElementById('excelDownloads').style.display = 'block';
+            };
+            reader.readAsText(file);
+        }
+
+        function xmlToJson(xml) {
+            const obj = [];
+            const items = xml.getElementsByTagName("item");
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                const row = {};
+                for (let j = 0; j < item.children.length; j++) {
+                    const child = item.children[j];
+                    row[child.nodeName] = child.textContent;
+                }
+                obj.push(row);
+            }
+            return obj;
+        }
+
+        function convertExcelToXml() {
+            const fileInput = document.getElementById('chooseFile');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('Please select an Excel file first.');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+                worksheet.forEach((row, index) => {
+                    const xml = jsonToXml([row]);
+                    const filename = `output${index + 1}.xml`;
+                    storeXmlFile(xml, filename);
+                    generatedFiles.push({ filename, content: xml });
+                });
+
+                document.getElementById('noResults').style.display = 'none';
+                document.getElementById('downloadAllBtn').disabled = false;
+                document.getElementById('downloads').style.display = 'block';
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function jsonToXml(json) {
+            let xml = '<root>\n';
+            json.forEach(row => {
+                xml += '  <item>\n';
+                for (let key in row) {
+                    xml += `    <${key}>${row[key]}</${key}>\n`;
+                }
+                xml += '  </item>\n';
+            });
+            xml += '</root>';
+            return xml;
+        }
+
+        function storeXmlFile(xml, filename) {
+            const blob = new Blob([xml], { type: 'application/xml' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            link.textContent = filename;
+            link.className = 'list-group-item list-group-item-action';
+            document.getElementById('downloadList').appendChild(link);
+        }
+
+        function downloadAllFiles() {
+            if (generatedFiles.length === 0) {
+                alert('No files to download.');
+                return;
+            }
+
+            const zip = new JSZip();
+            generatedFiles.forEach(file => {
+                zip.file(file.filename, file.content);
+            });
+
+            zip.generateAsync({ type: 'blob' }).then(content => {
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(content);
+                link.download = 'all_files.zip';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            });
+        }
+    </script>
+</body>
+</html>
